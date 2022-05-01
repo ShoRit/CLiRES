@@ -120,6 +120,16 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# Data
+code/wandb
+data/
+log/
+checkpoints/
+old_checkpoints/
+smiler_checkpoints/
+predictions/
+predictions_SMILER/
+
 # mypy
 .mypy_cache/
 .dmypy.json
