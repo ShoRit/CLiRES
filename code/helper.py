@@ -101,3 +101,5 @@ def mergeList(list_of_list):
 
 def check_file(filename):
     return pathlib.Path(filename).is_file()
+
+    

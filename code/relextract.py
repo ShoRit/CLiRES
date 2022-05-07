@@ -7,6 +7,8 @@ from transformers import get_linear_schedule_with_warmup, get_constant_schedule_
 from transformers.optimization import AdamW
 import torch
 import wandb
+from igraph import * 
+
 
 def seed_everything():
 	SEED = args.seed
@@ -135,8 +137,8 @@ def main(args):
 	device 												=   seed_everything()
 	args.data_dir										=   f'/data/multilingual_KGQA/{args.data}/data'
 
-	src_file 											= 	f'{args.data_dir}/{args.src_lang}_rels.dill'
-	tgt_file 											= 	f'{args.data_dir}/{args.tgt_lang}_rels.dill'
+	src_file 											= 	f'{args.data_dir}/{args.src_lang}_new_rels.dill'
+	tgt_file 											= 	f'{args.data_dir}/{args.tgt_lang}_new_rels.dill'
 
 	deprel_dict 										= 	load_deprels(enhanced=False)
 	entity_dict             							= 	load_pickle(f'{args.data_dir}/ents.pkl')
@@ -145,7 +147,7 @@ def main(args):
 	args.num_rels 										= 	len(relation_dict)
 	args.num_ents 										= 	len(entity_dict)
  
-    
+	
 	if check_file(src_file):
 		src_dataset										=   load_dill(src_file)
 	else:
@@ -156,11 +158,8 @@ def main(args):
 	else:
 		print('TGT FILE IS NOT CREATED'); exit()
 
-	if args.data 										== 'SMILER':
-		checkpoint_file 								=  f'../smiler_checkpoints/{args.src_lang}_{args.tgt_lang}-model_{args.bert_model}-dep_{args.dep}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
-	else:
-		checkpoint_file 								=  f'../checkpoints/{args.src_lang}_{args.tgt_lang}-model_{args.bert_model}-dep_{args.dep}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
-  
+	checkpoint_file 									=  f'../{args.data}_checkpoints/{args.src_lang}_{args.tgt_lang}-model_{args.bert_model}-dep_{args.dep}-gnn-depth_{args.gnn_depth}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
+	
 	if args.src_lang == args.tgt_lang:
 		train_data, dev_data, test_data     			=   src_dataset['train']['rels'], src_dataset['dev']['rels'], src_dataset['test']['rels']
 	else:
@@ -208,8 +207,8 @@ def main(args):
    
 			model.train()
 			for data in tqdm(trainloader):
-				tokens_tensors, segments_tensors, marked_e1, marked_e2, masks_tensors, relation_emb, label_ids, et_1, et_2, graph_tensors, ent1_emb, ent2_emb = [t.to(device) for t in data]
-				bat 									= (tokens_tensors, segments_tensors, marked_e1, marked_e2, masks_tensors, relation_emb, label_ids, et_1, et_2, graph_tensors, ent1_emb, ent2_emb)
+				tokens_tensors, segments_tensors, marked_e1, marked_e2, masks_tensors, relation_emb, label_ids, et_1, et_2, graph_tensors, ent1_emb, ent2_emb, _ = [t.to(device) for t in data]
+				bat 									= (tokens_tensors, segments_tensors, marked_e1, marked_e2, masks_tensors, relation_emb, label_ids, et_1, et_2, graph_tensors, ent1_emb, ent2_emb, _)
 				optimizer.zero_grad()
 				
 				rel_logits, ent1_logits, ent2_logits    = model((bat))
@@ -220,7 +219,7 @@ def main(args):
 				loss 									= rel_loss*args.mtl + (1-args.mtl)*et1_loss*0.5 + (1-args.mtl)*et2_loss*0.5
 
 				wandb.log({"batch_loss": loss.item()})
-    
+	
 				loss.backward()
 				optimizer.step()
 				running_loss += loss.item()
@@ -264,10 +263,7 @@ def main(args):
 	# Evaluation is done here. 
 
 	if args.mode											== 'eval':
-		if args.data 										== 'SMILER':
-			checkpoint_file 								=  f'../smiler_checkpoints/{args.src_lang}_{args.src_lang}-model_{args.bert_model}-dep_{args.dep}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
-		else:
-			checkpoint_file 								=  f'../checkpoints/{args.src_lang}_{args.src_lang}-model_{args.bert_model}-dep_{args.dep}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
+		checkpoint_file 									=  f'../{args.data}_checkpoints/{args.src_lang}_{args.tgt_lang}-model_{args.bert_model}-dep_{args.dep}-gnn-depth_{args.gnn_depth}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
 		if not check_file(checkpoint_file) :
 			print('MODEL CANNOT BE LOADED BY THESE SPECIFICATIONS')
 			return
@@ -308,7 +304,7 @@ def main(args):
 
   
 	if args.mode												== 'batch_eval':
-     
+	 
 		prec_arr, rec_arr, f1_arr								=  [],[],[] 
 		wandb.login()
 		wandb.init(project="ml-relation-evaluation", 			entity="flow-graphs-cmu", name=f'{args.src_lang}_{args.tgt_lang}-dep_{args.dep}-el_{args.el}-all')
@@ -323,12 +319,11 @@ def main(args):
 		testset 												= RelDataset(test_data, args)
 		testloader     							   				= DataLoader(testset, batch_size=args.batch_size, collate_fn=create_mini_batch)
 	
-  	
+		res_arr 												= []
 		for seed in range(0,5):
-			if args.data 										== 'SMILER':
-				checkpoint_file 								=  f'../smiler_checkpoints/{args.src_lang}_{args.src_lang}-model_{args.bert_model}-dep_{args.dep}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
-			else:
-				checkpoint_file 								=  f'../checkpoints/{args.src_lang}_{args.src_lang}-model_{args.bert_model}-dep_{args.dep}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
+			checkpoint_file 								    =  f'../{args.data}_checkpoints/{args.src_lang}_{args.src_lang}-model_{args.bert_model}-dep_{args.dep}-gnn-depth_{args.gnn_depth}-el_{args.el}-mtl_{args.mtl}-seed_{seed}-lr_{args.lr}'
+			print(checkpoint_file)
+   
 			if not check_file(checkpoint_file) :
 				print('MODEL CANNOT BE LOADED BY THESE SPECIFICATIONS')
 				return
@@ -336,12 +331,18 @@ def main(args):
 			model.eval()
 			pt, rt, f1t 	 = seen_eval(model, testloader, device=device)
 			# print(f'Test data {f1t} \t Prec {pt} \t Rec {rt}')
+			res_arr.append((f1t,rt,pt))
+
+		res_arr = sorted(res_arr, reverse=True)
+		for elem in res_arr:
+			f1t, rt, pt = elem
 			prec_arr.append(pt); rec_arr.append(rt); f1_arr.append(f1t)
 		
 
-		wandb.log({"f1": 		np.mean(f1t)})
-		wandb.log({"precision": np.mean(pt)})
-		wandb.log({"recall": 	np.mean(rt)})
+		wandb.log({"f1": 		np.mean(f1_arr)})
+		wandb.log({"std_f1": 	np.std(f1_arr)})
+		wandb.log({"precision": np.mean(prec_arr)})
+		wandb.log({"recall": 	np.mean(rec_arr)})
 		wandb.log({"seed": 		"all"})
 		wandb.log({"dep": 		args.dep})
 		wandb.log({"el": 		args.el})
@@ -350,45 +351,60 @@ def main(args):
 		wandb.log({"lr": 		args.lr})
 		wandb.log({"src_lang": 	args.src_lang})
 		wandb.log({"tgt_lang": 	args.tgt_lang})
+		wandb.log({"gnn_depth": args.gnn_depth})
+		wandb.log({"data"	  : args.data})
+
+
 
   
 
-	if args.mode											== 'predict':
-		if args.data 										== 'SMILER':
-			checkpoint_file 								=  f'../smiler_checkpoints/{args.src_lang}_{args.src_lang}-model_{args.bert_model}-dep_{args.dep}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
-		else:
-			checkpoint_file 								=  f'../checkpoints/{args.src_lang}_{args.src_lang}-model_{args.bert_model}-dep_{args.dep}-el_{args.el}-mtl_{args.mtl}-seed_{args.seed}-lr_{args.lr}'
-   
-		if not check_file(checkpoint_file) :
-			print('MODEL CANNOT BE LOADED BY THESE SPECIFICATIONS')
-			return
-  
+	if args.mode											    == 'predict':	
 		testset 												= RelDataset(test_data, args)
-		testloader     							   				= DataLoader(testset, batch_size=args.batch_size, collate_fn=create_mini_batch)
-  
-		model.load_state_dict(torch.load(checkpoint_file))
-		model.eval()
+		testloader                                              = DataLoader(testset, batch_size=args.batch_size, collate_fn=create_mini_batch)
 
-		y_pred, y_true 	 = seen_predict(model, testloader, device=device)
-		inv_relation_dict = {relation_dict[key]:key for key in relation_dict}
+		pred_dict 		 	                                    = ddict(dict)
+		for seed in range(0,3):
+			checkpoint_file 									=  f'../{args.data}_checkpoints/{args.src_lang}_{args.src_lang}-model_{args.bert_model}-dep_{args.dep}-gnn-depth_{args.gnn_depth}-el_{args.el}-mtl_{args.mtl}-seed_{seed}-lr_{args.lr}'
+			if not check_file(checkpoint_file) :
+				print('MODEL CANNOT BE LOADED BY THESE SPECIFICATIONS')
+			model.load_state_dict(torch.load(checkpoint_file))
+			model.eval()
+			y_pred, y_true 	 = seen_predict(model, testloader, device=device)
+			inv_relation_dict = {relation_dict[key]:key for key in relation_dict}
 
-		pred_dict 		 = ddict(dict)
-		bad_sents 	     = 0
-		for idx in tqdm(range(0, len(test_data))):
-			try:
-				pred_dict[idx]['sent'] 		= test_data[idx]['sent']
-				pred_dict[idx]['sent_len'] 	= len(test_data[idx]['tokens'])
-				arg1_start, arg2_start 		= test_data[idx]['arg1_ids'].index(1), test_data[idx]['arg2_ids'].index(1) 
-				arg1_end, arg2_end 			= arg1_start + np.sum(test_data[idx]['arg1_ids'])-1, arg2_start + np.sum(test_data[idx]['arg2_ids'])-1
-				pred_dict[idx]['lex_dist']  = max(arg1_start, arg2_start) - min(arg1_end, arg2_end)
-				pred_dict[idx]['pred_rel']  = inv_relation_dict[y_pred[idx]]
-				pred_dict[idx]['true_rel']  = inv_relation_dict[y_true[idx]]
-			except Exception as e:
-				bad_sents +=1
-				continue
+			bad_sents 	     = 0
+			for idx in tqdm(range(0, len(test_data))):
+				try:                
+					dep_data 										  = test_data[idx]['dep_data']
+					edges                                             = dep_data.edge_index.cpu().detach().numpy()
+					n1_mask, n2_mask                                  = dep_data.n1_mask.cpu().detach().numpy(), dep_data.n2_mask.cpu().detach().numpy() 
+					src_nodes                                         = np.where(n1_mask==1)[0]
+					tgt_nodes                                         = np.where(n2_mask==1)[0]
+					graph                                             = Graph(directed=False)
+					graph.add_vertices(list(range(len(n1_mask))))
+					graph.add_edges([(n1,n2) for n1,n2 in zip(edges[0],edges[1])])
+					try:
+						sp = min([min(path_len) for path_len in graph.shortest_paths(src_nodes, tgt_nodes)])
+					except Exception as e:
+						if len(src_nodes)>0 and len(tgt_nodes) >0 : sp =0
+						else: raise AssertionError
+					pred_dict[idx + seed*len(test_data)]['sent'] 		= test_data[idx]['sent']
+					pred_dict[idx + seed*len(test_data)]['sent_len'] 	= len(test_data[idx]['tokens'])
+					arg1_start, arg2_start 		= test_data[idx]['arg1_ids'].index(1), test_data[idx]['arg2_ids'].index(1) 
+					arg1_end, arg2_end 			= arg1_start + np.sum(test_data[idx]['arg1_ids'])-1, arg2_start + np.sum(test_data[idx]['arg2_ids'])-1
+					pred_dict[idx + seed*len(test_data)]['lex_dist']  = max(arg1_start, arg2_start) - min(arg1_end, arg2_end)
+					pred_dict[idx + seed*len(test_data)]['pred_rel']  = inv_relation_dict[y_pred[idx]]
+					pred_dict[idx + seed*len(test_data)]['true_rel']  = inv_relation_dict[y_true[idx]]
+					pred_dict[idx + seed*len(test_data)]['dep_path']  = sp
+					# pred_dict[idx + seed*len(test_data)]['syn_dist']  =                     # import pdb; pdb.set_trace()
+					
+				except Exception as e:
+					print(e)
+					bad_sents +=1
+					continue
 
-		print(bad_sents)
-		pred_file 												= f'../predictions_{args.data}/{args.src_lang}_{args.tgt_lang}-dep_{args.dep}.pkl'
+			print(bad_sents)
+		pred_file 												= f'../predictions_{args.data}/{args.src_lang}_{args.tgt_lang}-dep_{args.dep}-el_{args.el}-gnn-depth_{args.gnn_depth}.pkl'
 		dump_pickle(pred_dict, pred_file)
 	
 

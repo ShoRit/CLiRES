@@ -14,19 +14,35 @@
 #     done
 #     #   echo -n "Do training for $lang on $seed "
 # done
-
 # echo "" #### print the new line ###
 
-# for src_lang in fa uk ar ru en
+# for src_lang in ru pt #fa uk ar sv en de nl
 # do 
-#     for tgt_lang in fa uk ar ru en
+#     for tgt_lang in fa uk ar sv en de nl ru pt
 #         do
-#         CUDA_VISIBLE_DEVICES=5 python3 relextract.py --src_lang $src_lang --tgt_lang $tgt_lang --data SMILER --mtl 1 --el 0 --dep 0 --batch_size 6 --mode batch_eval
-#         CUDA_VISIBLE_DEVICES=5 python3 relextract.py --src_lang $src_lang --tgt_lang $tgt_lang --data SMILER --mtl 1 --el 0 --dep 1 --batch_size 6 --mode batch_eval --gnn_depth 2
-#         # CUDA_VISIBLE_DEVICES=2 python3 relextract.py --src_lang $lang --tgt_lang ar --data SMILER --mtl 1 --el 0 --dep 0 --batch_size 6 --mode eval --seed 0
-#         # CUDA_VISIBLE_DEVICES=3 python3 relextract.py --src_lang $lang --tgt_lang ar --data SMILER --mtl 1 --el 0 --dep 1 --batch_size 6 --mode eval --seed 0
+#         CUDA_VISIBLE_DEVICES=5 python3 relextract.py --src_lang $src_lang --tgt_lang $tgt_lang --data SMILER --mtl 1 --el 0 --dep 0 --batch_size 96 --mode predict
+#         CUDA_VISIBLE_DEVICES=5 python3 relextract.py --src_lang $src_lang --tgt_lang $tgt_lang --data SMILER --mtl 1 --el 0 --dep 1 --batch_size 96 --mode predict --gnn_depth 2
 #         done
 # done
+
+
+for src_lang in ru pt fa uk ar sv en de nl
+do 
+    CUDA_VISIBLE_DEVICES=5 python3 relextract.py --src_lang $src_lang --tgt_lang $src_lang --data SMILER --mtl 1 --el 0 --dep 0 --batch_size 96 --mode batch_eval
+    CUDA_VISIBLE_DEVICES=5 python3 relextract.py --src_lang $src_lang --tgt_lang $src_lang --data SMILER --mtl 1 --el 0 --dep 1 --batch_size 96 --mode batch_eval --gnn_depth 2
+done
+
+
+# for src_lang in fa uk ar sv en de nl
+# do 
+#     for tgt_lang in ru pt
+#         do
+#         CUDA_VISIBLE_DEVICES=5 python3 relextract.py --src_lang $src_lang --tgt_lang $tgt_lang --data SMILER --mtl 1 --el 0 --dep 0 --batch_size 96 --mode predict
+#         CUDA_VISIBLE_DEVICES=5 python3 relextract.py --src_lang $src_lang --tgt_lang $tgt_lang --data SMILER --mtl 1 --el 0 --dep 1 --batch_size 96 --mode predict --gnn_depth 2
+#         done
+# done
+
+
 
 # CUDA_VISIBLE_DEVICES=0 python3 relextract.py --src_lang uk --tgt_lang ru --data SMILER --mtl 1 --el 0 --dep 1 --batch_size 6 --mode batch_eval --gnn_depth 2 
 
